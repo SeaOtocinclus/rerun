@@ -264,6 +264,22 @@ impl PointCloudDrawData {
                 ..position_data_texture_desc
             },
         );
+        let scale_texture = ctx.gpu_resources.textures.alloc(
+            &ctx.device,
+            &TextureDesc {
+                label: "PointCloudDrawData::scale_texture".into(),
+                format: wgpu::TextureFormat::Rgba32Float,
+                ..position_data_texture_desc
+            },
+        );
+        let rotation_texture = ctx.gpu_resources.textures.alloc(
+            &ctx.device,
+            &TextureDesc {
+                label: "PointCloudDrawData::rotat_texture".into(),
+                format: wgpu::TextureFormat::Rgba32Float,
+                ..position_data_texture_desc
+            },
+        );
         let picking_instance_id_texture = ctx.gpu_resources.textures.alloc(
             &ctx.device,
             &TextureDesc {
@@ -304,33 +320,74 @@ impl PointCloudDrawData {
             )?;
         }
 
-        builder
-            .color_buffer
-            .fill_n(ecolor::Color32::TRANSPARENT, num_elements_padding)?;
-        builder.color_buffer.copy_to_texture2d(
-            ctx.active_frame.before_view_builder_encoder.lock().get(),
-            wgpu::ImageCopyTexture {
-                texture: &color_texture.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            texture_copy_extent,
-        )?;
+        {
+            re_tracing::profile_scope!("copy-color");
+            builder
+                .color_buffer
+                .fill_n(ecolor::Color32::TRANSPARENT, num_elements_padding)?;
+            builder.color_buffer.copy_to_texture2d(
+                ctx.active_frame.before_view_builder_encoder.lock().get(),
+                wgpu::ImageCopyTexture {
+                    texture: &color_texture.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                texture_copy_extent,
+            )?;
+        }
 
-        builder
-            .picking_instance_ids_buffer
-            .fill_n(Default::default(), num_elements_padding)?;
-        builder.picking_instance_ids_buffer.copy_to_texture2d(
-            ctx.active_frame.before_view_builder_encoder.lock().get(),
-            wgpu::ImageCopyTexture {
-                texture: &picking_instance_id_texture.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            texture_copy_extent,
-        )?;
+        {
+            re_tracing::profile_scope!("copy-scales");
+            builder
+                .scale_buffer
+                .fill_n(glam::Vec4::ONE, num_elements_padding)?;
+            builder.scale_buffer.copy_to_texture2d(
+                ctx.active_frame.before_view_builder_encoder.lock().get(),
+                wgpu::ImageCopyTexture {
+                    texture: &scale_texture.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                texture_copy_extent,
+            )?;
+        }
+
+        {
+            re_tracing::profile_scope!("copy-rotation");
+            // XYZW quaternion
+            builder
+                .rotation_buffer
+                .fill_n(glam::Quat::IDENTITY, num_elements_padding)?;
+            builder.rotation_buffer.copy_to_texture2d(
+                ctx.active_frame.before_view_builder_encoder.lock().get(),
+                wgpu::ImageCopyTexture {
+                    texture: &rotation_texture.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                texture_copy_extent,
+            )?;
+        }
+
+        {
+            re_tracing::profile_scope!("copy-picking-ids");
+            builder
+                .picking_instance_ids_buffer
+                .fill_n(Default::default(), num_elements_padding)?;
+            builder.picking_instance_ids_buffer.copy_to_texture2d(
+                ctx.active_frame.before_view_builder_encoder.lock().get(),
+                wgpu::ImageCopyTexture {
+                    texture: &picking_instance_id_texture.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                texture_copy_extent,
+            )?;
+        }
 
         let draw_data_uniform_buffer_bindings = create_and_fill_uniform_buffer_batch(
             ctx,
@@ -364,6 +421,8 @@ impl PointCloudDrawData {
                     entries: smallvec![
                         BindGroupEntry::DefaultTextureView(position_data_texture.handle),
                         BindGroupEntry::DefaultTextureView(color_texture.handle),
+                        BindGroupEntry::DefaultTextureView(scale_texture.handle),
+                        BindGroupEntry::DefaultTextureView(rotation_texture.handle),
                         BindGroupEntry::DefaultTextureView(picking_instance_id_texture.handle),
                         draw_data_uniform_buffer_binding,
                     ],
@@ -540,6 +599,7 @@ impl Renderer for PointCloudRenderer {
             &BindGroupLayoutDesc {
                 label: "PointCloudRenderer::bind_group_layout_all_points".into(),
                 entries: vec![
+                    // position data texture (xyz + radius):
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::VERTEX,
@@ -550,6 +610,7 @@ impl Renderer for PointCloudRenderer {
                         },
                         count: None,
                     },
+                    // Color data texture (RGBA):
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::VERTEX,
@@ -560,8 +621,31 @@ impl Renderer for PointCloudRenderer {
                         },
                         count: None,
                     },
+                    // Scale texture (XYZ_):
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    // Rotation texture (XYZW quaternion):
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    // Picking instance IDs:
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
                         visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Texture {
                             sample_type: wgpu::TextureSampleType::Uint,
@@ -570,8 +654,9 @@ impl Renderer for PointCloudRenderer {
                         },
                         count: None,
                     },
+                    // Draw-data uniform buffer:
                     wgpu::BindGroupLayoutEntry {
-                        binding: 3,
+                        binding: 5,
                         visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
@@ -640,7 +725,12 @@ impl Renderer for PointCloudRenderer {
             fragment_entrypoint: "fs_main".into(),
             fragment_handle: shader_module,
             vertex_buffers: smallvec![],
-            render_targets: smallvec![Some(ViewBuilder::MAIN_TARGET_COLOR_FORMAT.into())],
+            render_targets: smallvec![Some(wgpu::ColorTargetState {
+                format: ViewBuilder::MAIN_TARGET_COLOR_FORMAT,
+                // TODO(andreas): have two render pipelines, an opaque one and a transparent one. Transparent shouldn't write depth!
+                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 ..Default::default()

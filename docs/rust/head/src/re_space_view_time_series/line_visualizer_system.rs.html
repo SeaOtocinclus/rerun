@@ -249,6 +249,54 @@
 <a href="#249" id="249">249</a>
 <a href="#250" id="250">250</a>
 <a href="#251" id="251">251</a>
+<a href="#252" id="252">252</a>
+<a href="#253" id="253">253</a>
+<a href="#254" id="254">254</a>
+<a href="#255" id="255">255</a>
+<a href="#256" id="256">256</a>
+<a href="#257" id="257">257</a>
+<a href="#258" id="258">258</a>
+<a href="#259" id="259">259</a>
+<a href="#260" id="260">260</a>
+<a href="#261" id="261">261</a>
+<a href="#262" id="262">262</a>
+<a href="#263" id="263">263</a>
+<a href="#264" id="264">264</a>
+<a href="#265" id="265">265</a>
+<a href="#266" id="266">266</a>
+<a href="#267" id="267">267</a>
+<a href="#268" id="268">268</a>
+<a href="#269" id="269">269</a>
+<a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>itertools::Itertools <span class="kw">as _</span>;
 <span class="kw">use </span>re_query_cache::QueryError;
 <span class="kw">use </span>re_types::archetypes;
@@ -347,157 +395,205 @@
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(), QueryError&gt; {
         <span class="macro">re_tracing::profile_function!</span>();
 
-        <span class="kw">let </span>query_caches = ctx.entity_db.query_caches();
-        <span class="kw">let </span>store = ctx.entity_db.store();
-
         <span class="kw">let </span>(plot_bounds, time_per_pixel) = determine_plot_bounds_and_time_per_pixel(ctx, query);
 
-        <span class="comment">// TODO(cmc): this should be thread-pooled in case there are a gazillon series in the same plot…
-        </span><span class="kw">for </span>data_result <span class="kw">in </span>query.iter_visible_data_results(<span class="self">Self</span>::identifier()) {
-            <span class="kw">let </span>annotations = <span class="self">self</span>.annotation_map.find(<span class="kw-2">&amp;</span>data_result.entity_path);
-            <span class="kw">let </span>annotation_info = annotations
-                .resolved_class_description(<span class="prelude-val">None</span>)
-                .annotation_info();
-            <span class="kw">let </span>default_color = DefaultColor::EntityPath(<span class="kw-2">&amp;</span>data_result.entity_path);
+        <span class="kw">let </span>data_results = query.iter_visible_data_results(<span class="self">Self</span>::identifier());
 
-            <span class="kw">let </span>override_color = lookup_override::&lt;Color&gt;(data_result, ctx).map(|c| c.to_array());
-            <span class="kw">let </span>override_series_name = lookup_override::&lt;Name&gt;(data_result, ctx).map(|t| t.<span class="number">0</span>);
-            <span class="kw">let </span>override_stroke_width =
-                lookup_override::&lt;StrokeWidth&gt;(data_result, ctx).map(|r| r.<span class="number">0</span>);
-
-            <span class="comment">// All the default values for a `PlotPoint`, accounting for both overrides and default
-            // values.
-            </span><span class="kw">let </span>default_point = PlotPoint {
-                time: <span class="number">0</span>,
-                value: <span class="number">0.0</span>,
-                attrs: PlotPointAttrs {
-                    label: <span class="prelude-val">None</span>,
-                    color: annotation_info.color(override_color, default_color),
-                    marker_size: override_stroke_width.unwrap_or(DEFAULT_STROKE_WIDTH),
-                    kind: PlotSeriesKind::Continuous,
-                },
-            };
-
-            <span class="kw">let </span><span class="kw-2">mut </span>points = Vec::new();
-
-            <span class="kw">let </span>time_range = determine_time_range(
-                query,
-                data_result,
-                plot_bounds,
-                ctx.app_options.experimental_plot_query_clamping,
-            );
-
+        <span class="kw">let </span>parallel_loading = <span class="bool-val">false</span>; <span class="comment">// TODO(emilk): enable parallel loading when it is faster, because right now it is often slower.
+        </span><span class="kw">if </span>parallel_loading {
+            <span class="kw">use </span>rayon::prelude::<span class="kw-2">*</span>;
+            <span class="macro">re_tracing::profile_wait!</span>(<span class="string">&quot;load_series&quot;</span>);
+            <span class="kw">for </span>one_series <span class="kw">in </span>data_results
+                .collect_vec()
+                .par_iter()
+                .map(|data_result| -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;PlotSeries&gt;, QueryError&gt; {
+                    <span class="kw">let </span>annotations = <span class="self">self</span>.annotation_map.find(<span class="kw-2">&amp;</span>data_result.entity_path);
+                    <span class="kw">let </span><span class="kw-2">mut </span>series = <span class="macro">vec!</span>[];
+                    load_series(
+                        ctx,
+                        query,
+                        plot_bounds,
+                        time_per_pixel,
+                        <span class="kw-2">&amp;</span>annotations,
+                        data_result,
+                        <span class="kw-2">&amp;mut </span>series,
+                    )<span class="question-mark">?</span>;
+                    <span class="prelude-val">Ok</span>(series)
+                })
+                .collect::&lt;Vec&lt;<span class="prelude-ty">Result</span>&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;&gt;()
             {
-                <span class="macro">re_tracing::profile_scope!</span>(<span class="string">&quot;primary&quot;</span>, <span class="kw-2">&amp;</span>data_result.entity_path.to_string());
-
-                <span class="kw">let </span>entity_path = <span class="kw-2">&amp;</span>data_result.entity_path;
-                <span class="kw">let </span>query = re_data_store::RangeQuery::new(query.timeline, time_range);
-
-                <span class="comment">// TODO(jleibs): need to do a &quot;joined&quot; archetype query
-                // The `Scalar` archetype queries for `MarkerShape` &amp; `MarkerSize` in the point visualizer,
-                // and so it must do so here also.
-                // See https://github.com/rerun-io/rerun/pull/5029
-                </span>query_caches.query_archetype_range_pov1_comp4::&lt;
-                    archetypes::Scalar,
-                    Scalar,
-                    Color,
-                    StrokeWidth,
-                    MarkerSize, <span class="comment">// unused
-                    </span>MarkerShape, <span class="comment">// unused
-                    </span><span class="kw">_</span>,
-                &gt;(
-                    store,
-                    <span class="kw-2">&amp;</span>query,
-                    entity_path,
-                    |_timeless, entry_range, (times, <span class="kw">_</span>, scalars, colors, stroke_widths, <span class="kw">_</span>, <span class="kw">_</span>)| {
-                        <span class="kw">let </span>times = times.range(entry_range.clone()).map(|(time, <span class="kw">_</span>)| time.as_i64());
-                        <span class="comment">// Allocate all points.
-                        </span>points = times.map(|time| PlotPoint {
-                            time,
-                            ..default_point.clone()
-                        }).collect_vec();
-
-                        <span class="comment">// Fill in values.
-                        </span><span class="kw">for </span>(i, scalar) <span class="kw">in </span>scalars.range(entry_range.clone()).enumerate() {
-                            <span class="kw">if </span>scalar.len() &gt; <span class="number">1 </span>{
-                                <span class="macro">re_log::warn_once!</span>(<span class="string">&quot;found a scalar batch in {entity_path:?} -- those have no effect&quot;</span>);
-                            } <span class="kw">else if </span>scalar.is_empty() {
-                                points[i].attrs.kind = PlotSeriesKind::Clear;
-                            } <span class="kw">else </span>{
-                                points[i].value = scalar.first().map_or(<span class="number">0.0</span>, |s| s.<span class="number">0</span>);
-                            }
-                        }
-
-                        <span class="comment">// Make it as clear as possible to the optimizer that some parameters
-                        // go completely unused as soon as overrides have been defined.
-
-                        // Fill in colors -- if available _and_ not overridden.
-                        </span><span class="kw">if </span>override_color.is_none() {
-                            <span class="kw">if let </span><span class="prelude-val">Some</span>(colors) = colors {
-                                <span class="kw">for </span>(i, color) <span class="kw">in </span>colors.range(entry_range.clone()).enumerate() {
-                                    <span class="kw">if </span>i &gt;= points.len() {
-                                        <span class="macro">re_log::debug_once!</span>(<span class="string">&quot;more color attributes than points in {entity_path:?} -- this points to a bug in the query cache&quot;</span>);
-                                        <span class="kw">break</span>;
-                                    }
-                                    <span class="kw">if let </span><span class="prelude-val">Some</span>(color) = color.first().copied().flatten().map(|c| {
-                                        <span class="kw">let </span>[r,g,b,a] = c.to_array();
-                                        <span class="kw">if </span>a == <span class="number">255 </span>{
-                                            <span class="comment">// Common-case optimization
-                                            </span>re_renderer::Color32::from_rgb(r, g, b)
-                                        } <span class="kw">else </span>{
-                                            re_renderer::Color32::from_rgba_unmultiplied(r, g, b, a)
-                                        }
-                                    }) {
-                                        points[i].attrs.color = color;
-                                    }
-                                }
-                            }
-                        }
-
-                        <span class="comment">// Fill in radii -- if available _and_ not overridden.
-                        </span><span class="kw">if </span>override_stroke_width.is_none() {
-                            <span class="kw">if let </span><span class="prelude-val">Some</span>(stroke_widths) = stroke_widths {
-                                <span class="kw">for </span>(i, stroke_width) <span class="kw">in </span>stroke_widths.range(entry_range.clone()).enumerate() {
-                                    <span class="kw">if </span>i &gt;= stroke_widths.num_entries() {
-                                        <span class="macro">re_log::debug_once!</span>(<span class="string">&quot;more stroke width attributes than points in {entity_path:?} -- this points to a bug in the query cache&quot;</span>);
-                                        <span class="kw">break</span>;
-                                    }
-                                    <span class="kw">if let </span><span class="prelude-val">Some</span>(stroke_width) = stroke_width.first().copied().flatten().map(|r| r.<span class="number">0</span>) {
-                                        points[i].attrs.marker_size = stroke_width;
-                                    }
-                                }
-                            }
-                        }
-                    },
+                <span class="self">self</span>.all_series.append(<span class="kw-2">&amp;mut </span>one_series<span class="question-mark">?</span>);
+            }
+        } <span class="kw">else </span>{
+            <span class="kw">for </span>data_result <span class="kw">in </span>data_results {
+                <span class="kw">let </span>annotations = <span class="self">self</span>.annotation_map.find(<span class="kw-2">&amp;</span>data_result.entity_path);
+                load_series(
+                    ctx,
+                    query,
+                    plot_bounds,
+                    time_per_pixel,
+                    <span class="kw-2">&amp;</span>annotations,
+                    data_result,
+                    <span class="kw-2">&amp;mut </span><span class="self">self</span>.all_series,
                 )<span class="question-mark">?</span>;
             }
-
-            <span class="comment">// Check for an explicit label if any.
-            // We&#39;re using a separate latest-at query for this since the semantics for labels changing over time are a
-            // a bit unclear.
-            // Sidestepping the cache here shouldn&#39;t be a problem since we do so only once per entity.
-            </span><span class="kw">let </span>series_name = <span class="kw">if let </span><span class="prelude-val">Some</span>(override_name) = override_series_name {
-                <span class="prelude-val">Some</span>(override_name)
-            } <span class="kw">else </span>{
-                ctx.entity_db
-                    .store()
-                    .query_latest_component::&lt;Name&gt;(<span class="kw-2">&amp;</span>data_result.entity_path, <span class="kw-2">&amp;</span>ctx.current_query())
-                    .map(|name| name.value.<span class="number">0</span>)
-            };
-
-            <span class="comment">// Now convert the `PlotPoints` into `Vec&lt;PlotSeries&gt;`
-            </span>points_to_series(
-                data_result,
-                time_per_pixel,
-                points,
-                store,
-                query,
-                series_name,
-                <span class="kw-2">&amp;mut </span><span class="self">self</span>.all_series,
-            );
         }
 
         <span class="prelude-val">Ok</span>(())
     }
+}
+
+<span class="kw">fn </span>load_series(
+    ctx: <span class="kw-2">&amp;</span>ViewerContext&lt;<span class="lifetime">&#39;_</span>&gt;,
+    query: <span class="kw-2">&amp;</span>ViewQuery&lt;<span class="lifetime">&#39;_</span>&gt;,
+    plot_bounds: <span class="prelude-ty">Option</span>&lt;egui_plot::PlotBounds&gt;,
+    time_per_pixel: f64,
+    annotations: <span class="kw-2">&amp;</span>re_viewer_context::Annotations,
+    data_result: <span class="kw-2">&amp;</span>re_viewer_context::DataResult,
+    all_series: <span class="kw-2">&amp;mut </span>Vec&lt;PlotSeries&gt;,
+) -&gt; <span class="prelude-ty">Result</span>&lt;(), QueryError&gt; {
+    <span class="macro">re_tracing::profile_function!</span>();
+
+    <span class="kw">let </span>store = ctx.entity_db.store();
+    <span class="kw">let </span>query_caches = ctx.entity_db.query_caches();
+
+    <span class="kw">let </span>annotation_info = annotations
+        .resolved_class_description(<span class="prelude-val">None</span>)
+        .annotation_info();
+    <span class="kw">let </span>default_color = DefaultColor::EntityPath(<span class="kw-2">&amp;</span>data_result.entity_path);
+    <span class="kw">let </span>override_color = lookup_override::&lt;Color&gt;(data_result, ctx).map(|c| c.to_array());
+    <span class="kw">let </span>override_series_name = lookup_override::&lt;Name&gt;(data_result, ctx).map(|t| t.<span class="number">0</span>);
+    <span class="kw">let </span>override_stroke_width = lookup_override::&lt;StrokeWidth&gt;(data_result, ctx).map(|r| r.<span class="number">0</span>);
+
+    <span class="comment">// All the default values for a `PlotPoint`, accounting for both overrides and default
+    // values.
+    </span><span class="kw">let </span>default_point = PlotPoint {
+        time: <span class="number">0</span>,
+        value: <span class="number">0.0</span>,
+        attrs: PlotPointAttrs {
+            label: <span class="prelude-val">None</span>,
+            color: annotation_info.color(override_color, default_color),
+            marker_size: override_stroke_width.unwrap_or(DEFAULT_STROKE_WIDTH),
+            kind: PlotSeriesKind::Continuous,
+        },
+    };
+
+    <span class="kw">let </span><span class="kw-2">mut </span>points = Vec::new();
+
+    <span class="kw">let </span>time_range = determine_time_range(
+        query,
+        data_result,
+        plot_bounds,
+        ctx.app_options.experimental_plot_query_clamping,
+    );
+    {
+        <span class="macro">re_tracing::profile_scope!</span>(<span class="string">&quot;primary&quot;</span>, <span class="kw-2">&amp;</span>data_result.entity_path.to_string());
+
+        <span class="kw">let </span>entity_path = <span class="kw-2">&amp;</span>data_result.entity_path;
+        <span class="kw">let </span>query = re_data_store::RangeQuery::new(query.timeline, time_range);
+
+        <span class="comment">// TODO(jleibs): need to do a &quot;joined&quot; archetype query
+        // The `Scalar` archetype queries for `MarkerShape` &amp; `MarkerSize` in the point visualizer,
+        // and so it must do so here also.
+        // See https://github.com/rerun-io/rerun/pull/5029
+        </span>query_caches.query_archetype_range_pov1_comp4::&lt;
+            archetypes::Scalar,
+            Scalar,
+            Color,
+            StrokeWidth,
+            MarkerSize, <span class="comment">// unused
+            </span>MarkerShape, <span class="comment">// unused
+            </span><span class="kw">_</span>,
+        &gt;(
+            store,
+            <span class="kw-2">&amp;</span>query,
+            entity_path,
+            |_timeless, entry_range, (times, <span class="kw">_</span>, scalars, colors, stroke_widths, <span class="kw">_</span>, <span class="kw">_</span>)| {
+                <span class="kw">let </span>times = times.range(entry_range.clone()).map(|(time, <span class="kw">_</span>)| time.as_i64());
+                <span class="comment">// Allocate all points.
+                </span>points = times.map(|time| PlotPoint {
+                    time,
+                    ..default_point.clone()
+                }).collect_vec();
+
+                <span class="comment">// Fill in values.
+                </span><span class="kw">for </span>(i, scalar) <span class="kw">in </span>scalars.range(entry_range.clone()).enumerate() {
+                    <span class="kw">if </span>scalar.len() &gt; <span class="number">1 </span>{
+                        <span class="macro">re_log::warn_once!</span>(<span class="string">&quot;found a scalar batch in {entity_path:?} -- those have no effect&quot;</span>);
+                    } <span class="kw">else if </span>scalar.is_empty() {
+                        points[i].attrs.kind = PlotSeriesKind::Clear;
+                    } <span class="kw">else </span>{
+                        points[i].value = scalar.first().map_or(<span class="number">0.0</span>, |s| s.<span class="number">0</span>);
+                    }
+                }
+
+                <span class="comment">// Make it as clear as possible to the optimizer that some parameters
+                // go completely unused as soon as overrides have been defined.
+
+                // Fill in colors -- if available _and_ not overridden.
+                </span><span class="kw">if </span>override_color.is_none() {
+                    <span class="kw">if let </span><span class="prelude-val">Some</span>(colors) = colors {
+                        <span class="kw">for </span>(i, color) <span class="kw">in </span>colors.range(entry_range.clone()).enumerate() {
+                            <span class="kw">if </span>i &gt;= points.len() {
+                                <span class="macro">re_log::debug_once!</span>(<span class="string">&quot;more color attributes than points in {entity_path:?} -- this points to a bug in the query cache&quot;</span>);
+                                <span class="kw">break</span>;
+                            }
+                            <span class="kw">if let </span><span class="prelude-val">Some</span>(color) = color.first().copied().flatten().map(|c| {
+                                <span class="kw">let </span>[r,g,b,a] = c.to_array();
+                                <span class="kw">if </span>a == <span class="number">255 </span>{
+                                    <span class="comment">// Common-case optimization
+                                    </span>re_renderer::Color32::from_rgb(r, g, b)
+                                } <span class="kw">else </span>{
+                                    re_renderer::Color32::from_rgba_unmultiplied(r, g, b, a)
+                                }
+                            }) {
+                                points[i].attrs.color = color;
+                            }
+                        }
+                    }
+                }
+
+                <span class="comment">// Fill in radii -- if available _and_ not overridden.
+                </span><span class="kw">if </span>override_stroke_width.is_none() {
+                    <span class="kw">if let </span><span class="prelude-val">Some</span>(stroke_widths) = stroke_widths {
+                        <span class="kw">for </span>(i, stroke_width) <span class="kw">in </span>stroke_widths.range(entry_range.clone()).enumerate() {
+                            <span class="kw">if </span>i &gt;= stroke_widths.num_entries() {
+                                <span class="macro">re_log::debug_once!</span>(<span class="string">&quot;more stroke width attributes than points in {entity_path:?} -- this points to a bug in the query cache&quot;</span>);
+                                <span class="kw">break</span>;
+                            }
+                            <span class="kw">if let </span><span class="prelude-val">Some</span>(stroke_width) = stroke_width.first().copied().flatten().map(|r| r.<span class="number">0</span>) {
+                                points[i].attrs.marker_size = stroke_width;
+                            }
+                        }
+                    }
+                }
+            },
+        )<span class="question-mark">?</span>;
+    }
+
+    <span class="comment">// Check for an explicit label if any.
+    // We&#39;re using a separate latest-at query for this since the semantics for labels changing over time are a
+    // a bit unclear.
+    // Sidestepping the cache here shouldn&#39;t be a problem since we do so only once per entity.
+    </span><span class="kw">let </span>series_name = <span class="kw">if let </span><span class="prelude-val">Some</span>(override_name) = override_series_name {
+        <span class="prelude-val">Some</span>(override_name)
+    } <span class="kw">else </span>{
+        ctx.entity_db
+            .store()
+            .query_latest_component::&lt;Name&gt;(<span class="kw-2">&amp;</span>data_result.entity_path, <span class="kw-2">&amp;</span>ctx.current_query())
+            .map(|name| name.value.<span class="number">0</span>)
+    };
+
+    <span class="comment">// Now convert the `PlotPoints` into `Vec&lt;PlotSeries&gt;`
+    </span>points_to_series(
+        data_result,
+        time_per_pixel,
+        points,
+        store,
+        query,
+        series_name,
+        all_series,
+    );
+    <span class="prelude-val">Ok</span>(())
 }
 </code></pre></div></section></main></body></html>

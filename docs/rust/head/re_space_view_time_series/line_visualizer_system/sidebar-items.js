@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_STROKE_WIDTH"],"struct":["SeriesLineSystem"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_STROKE_WIDTH"],"fn":["load_series"],"struct":["SeriesLineSystem"]};
